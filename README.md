@@ -5,6 +5,8 @@
     </a>
 </div>
 
+how dafuq github even works for forks. I just vibe coded this to use xcap and latest image. It seems to be working just fine. I think. It definitely finds an orange spot on a picture with one orange spot. So now cargo won't be screaming at me yippee
+
 A Rust-based Computer visioner for locating images on screen
 
 It can search the entire screen over 3x faster than pyautogui and does not require OpenCV for options like Confidence. I've also added an option called Tolerance that allows for leniency with pixel colors that are close to the original image's. Written in pure Rust.
