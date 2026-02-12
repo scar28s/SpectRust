@@ -1,52 +1,111 @@
 // Importing necessary image processing and screenshot capturing modules.
-use image::{DynamicImage, GenericImageView, Pixel, Rgba};
-use screenshots::{DisplayInfo, Screen};
+use image::{DynamicImage, GenericImageView, Pixel, Rgba, RgbaImage};
+//use screenshots::{DisplayInfo, Screen};
+use xcap::Monitor;
 
-// Function that takes a screenshot of a specified area.
-// It takes as parameters the x, y coordinates and the width, height of the desired area.
+//// Function that takes a screenshot of a specified area.
+//// It takes as parameters the x, y coordinates and the width, height of the desired area.
+//fn screenshot(x: u16, y: u16, width: u16, height: u16) -> DynamicImage {
+//    // Determine current display size
+//    let display = size();
+//    // Ensure the capture area is within the screen size
+//    if !(x + width <= display.0 && y + height <= display.1) {
+//        panic!("One or more specified parameter is not within the screen size. Use screen::size() to check.")
+//    }
+//
+//    // Retrieve screen based on specified coordinates
+//    let screen = Screen::from_point(x.into(), y.into()).expect("Cannot get screen from specified x and y");
+//
+//    // Capture specified area of the screen
+//    let capture = screen
+//        .capture_area(x.into(), y.into(), width.into(), height.into())
+//        .expect("Unable to screen capture.");
+//
+//    // Convert capture to image buffer
+//    let buffer = capture.buffer();
+//
+//    // Load the image from memory buffer
+//    let dynamic_image = image::load_from_memory(buffer).unwrap();
+//
+//    return dynamic_image;
+//}
+//
+//
+//
+//// Function to get the size of the primary display.
+//fn size() -> (u16, u16) {
+//    // Retrieve all display info
+//    let displays: Vec<DisplayInfo> = DisplayInfo::all().expect("Unable to get displays");
+//    // Find primary display
+//    let primary = displays
+//        .iter()
+//        .find(|display| display.is_primary == true)
+//        .expect("Unable to find primary display");
+//    // Return width and height of primary display
+//    return (primary.width as u16, primary.height as u16);
+//}
+
 fn screenshot(x: u16, y: u16, width: u16, height: u16) -> DynamicImage {
-    // Determine current display size
-    let display = size();
-    // Ensure the capture area is within the screen size
-    if !(x + width <= display.0 && y + height <= display.1) {
-        panic!("One or more specified parameter is not within the screen size. Use screen::size() to check.")
+    // Get primary monitor (or adapt to find correct one if multi-monitor)
+    let monitors = Monitor::all().expect("Unable to get monitors");
+    let monitor = monitors
+        .into_iter()
+        .find(|m| m.is_primary().expect("no primary monitor"))
+        .expect("No primary monitor");
+
+    // xcap uses u32 for coords & size
+    let x = x as u32;
+    let y = y as u32;
+    let width = width as u32;
+    let height = height as u32;
+
+    // Optional: basic bounds check (you can improve this)
+    let mon_width = monitor.width().unwrap_or(0);
+    let mon_height = monitor.height().unwrap_or(0);
+    if x + width > mon_width || y + height > mon_height {
+        panic!(
+            "Capture area out of bounds: screen={}x{}, requested={}x{} @ ({},{})",
+            mon_width, mon_height, width, height, x, y
+        );
     }
-    
-    // Retrieve screen based on specified coordinates
-    let screen = Screen::from_point(x.into(), y.into()).expect("Cannot get screen from specified x and y");
 
-    // Capture specified area of the screen
-    let capture = screen
-        .capture_area(x.into(), y.into(), width.into(), height.into())
-        .expect("Unable to screen capture.");
+    // Capture the region
+    let captured = monitor
+        .capture_region(x, y, width, height)
+        .expect("Unable to capture region");
 
-    // Convert capture to image buffer
-    let buffer = capture.buffer();
+    // xcap::image::Image derefs to RgbaImage
+    let rgba_image: &RgbaImage = &captured;
 
-    // Load the image from memory buffer
-    let dynamic_image = image::load_from_memory(buffer).unwrap();
-
-    return dynamic_image;
+    // Convert to DynamicImage (same as before)
+    DynamicImage::ImageRgba8(rgba_image.clone())
 }
 
-
-
-// Function to get the size of the primary display.
 fn size() -> (u16, u16) {
-    // Retrieve all display info
-    let displays: Vec<DisplayInfo> = DisplayInfo::all().expect("Unable to get displays");
-    // Find primary display
-    let primary = displays
-        .iter()
-        .find(|display| display.is_primary == true)
-        .expect("Unable to find primary display");
-    // Return width and height of primary display
-    return (primary.width as u16, primary.height as u16);
+    let monitors = Monitor::all().expect("Unable to get monitors");
+    let primary = monitors
+        .into_iter()
+        .find(|m| m.is_primary().expect("reason"))
+        .expect("Unable to find primary monitor");
+
+    (
+        primary.width().expect("No width") as u16,
+        primary.height().expect("No height") as u16,
+    )
 }
 
 // Function to locate an image on the screen with optional region, minimum confidence, and tolerance.
 // Returns coordinates, width, height and confidence if image is found, otherwise None.
-fn locate_on_screen(screen: &[Rgba<u8>], img: &[Rgba<u8>], screen_width: u32, screen_height: u32, img_width: u32, img_height: u32, min_confidence: f32, tolerance: u8) -> Option<(u32, u32, u32, u32, f32)> {
+fn locate_on_screen(
+    screen: &[Rgba<u8>],
+    img: &[Rgba<u8>],
+    screen_width: u32,
+    screen_height: u32,
+    img_width: u32,
+    img_height: u32,
+    min_confidence: f32,
+    tolerance: u8,
+) -> Option<(u32, u32, u32, u32, f32)> {
     let step_size = 1;
 
     for y in (0..screen_height - img_height).step_by(step_size) {
@@ -69,9 +128,10 @@ fn locate_on_screen(screen: &[Rgba<u8>], img: &[Rgba<u8>], screen_width: u32, sc
 
                     total_pixels += 1;
 
-                    if within_tolerance(screen_pixel[0], img_pixel[0], tolerance) &&
-                       within_tolerance(screen_pixel[1], img_pixel[1], tolerance) &&
-                       within_tolerance(screen_pixel[2], img_pixel[2], tolerance) {
+                    if within_tolerance(screen_pixel[0], img_pixel[0], tolerance)
+                        && within_tolerance(screen_pixel[1], img_pixel[1], tolerance)
+                        && within_tolerance(screen_pixel[2], img_pixel[2], tolerance)
+                    {
                         matching_pixels += 1;
                     } else {
                         break 'outer;
@@ -79,7 +139,11 @@ fn locate_on_screen(screen: &[Rgba<u8>], img: &[Rgba<u8>], screen_width: u32, sc
                 }
             }
 
-            let confidence = if total_pixels == 0 { 0.0 } else { matching_pixels as f32 / total_pixels as f32 };
+            let confidence = if total_pixels == 0 {
+                0.0
+            } else {
+                matching_pixels as f32 / total_pixels as f32
+            };
 
             if confidence >= min_confidence {
                 return Some((x, y, img_width, img_height, confidence));
@@ -90,10 +154,18 @@ fn locate_on_screen(screen: &[Rgba<u8>], img: &[Rgba<u8>], screen_width: u32, sc
     None
 }
 
-
 // Function to locate center of an image within the screen with given parameters and tolerance.
 // Returns coordinates and confidence if image is found, otherwise None.
-fn locate_center_on_screen(screen: &[Rgba<u8>], img: &[Rgba<u8>], screen_width: u32, screen_height: u32, img_width: u32, img_height: u32, min_confidence: f32, tolerance: u8) -> Option<(u32, u32, f32)> {
+fn locate_center_on_screen(
+    screen: &[Rgba<u8>],
+    img: &[Rgba<u8>],
+    screen_width: u32,
+    screen_height: u32,
+    img_width: u32,
+    img_height: u32,
+    min_confidence: f32,
+    tolerance: u8,
+) -> Option<(u32, u32, f32)> {
     let step_size = 1;
 
     for y in (0..screen_height - img_height).step_by(step_size) {
@@ -116,9 +188,10 @@ fn locate_center_on_screen(screen: &[Rgba<u8>], img: &[Rgba<u8>], screen_width: 
 
                     total_pixels += 1;
 
-                    if within_tolerance(screen_pixel[0], img_pixel[0], tolerance) &&
-                       within_tolerance(screen_pixel[1], img_pixel[1], tolerance) &&
-                       within_tolerance(screen_pixel[2], img_pixel[2], tolerance) {
+                    if within_tolerance(screen_pixel[0], img_pixel[0], tolerance)
+                        && within_tolerance(screen_pixel[1], img_pixel[1], tolerance)
+                        && within_tolerance(screen_pixel[2], img_pixel[2], tolerance)
+                    {
                         matching_pixels += 1;
                     } else {
                         break 'outer;
@@ -126,18 +199,20 @@ fn locate_center_on_screen(screen: &[Rgba<u8>], img: &[Rgba<u8>], screen_width: 
                 }
             }
 
-            let confidence = if total_pixels == 0 { 0.0 } else { matching_pixels as f32 / total_pixels as f32 };
+            let confidence = if total_pixels == 0 {
+                0.0
+            } else {
+                matching_pixels as f32 / total_pixels as f32
+            };
 
             if confidence >= min_confidence {
                 return Some((x + img_width / 2, y + img_height / 2, confidence));
             }
         }
-    }   
+    }
 
     None
 }
-
-
 
 // Helper function to check if a color value is within a tolerance range
 fn within_tolerance(value1: u8, value2: u8, tolerance: u8) -> bool {
@@ -147,11 +222,14 @@ fn within_tolerance(value1: u8, value2: u8, tolerance: u8) -> bool {
     value1 >= min_value && value1 <= max_value
 }
 
-
-
 // Function to locate the center of an image on the screen with optional region, minimum confidence, and tolerance.
 // Returns coordinates and confidence if image is found, otherwise None.
-pub fn locate_center_of_image(img: &DynamicImage, region: Option<(u16, u16, u16, u16)>, min_confidence: Option<f32>, tolerance: Option<u8>) -> Option<(u32, u32, f32)> {
+pub fn locate_center_of_image(
+    img: &DynamicImage,
+    region: Option<(u16, u16, u16, u16)>,
+    min_confidence: Option<f32>,
+    tolerance: Option<u8>,
+) -> Option<(u32, u32, f32)> {
     // Default values
     let (x, y, width, height) = region.unwrap_or((0, 0, size().0, size().1));
     let min_confidence = min_confidence.unwrap_or(0.75);
@@ -175,17 +253,23 @@ pub fn locate_center_of_image(img: &DynamicImage, region: Option<(u16, u16, u16,
         img_width,
         img_height,
         min_confidence,
-        tolerance
+        tolerance,
     ) {
-        Some((found_x, found_y, confidence)) => Some((found_x + x as u32, found_y + y as u32, confidence)), // Add region start position to the result
+        Some((found_x, found_y, confidence)) => {
+            Some((found_x + x as u32, found_y + y as u32, confidence))
+        } // Add region start position to the result
         None => None,
     }
 }
 
-
 // Function to locate an image on the screen with optional region, minimum confidence, and tolerance.
 // Returns coordinates, width, height and confidence if image is found, otherwise None.
-pub fn locate_image(img: &DynamicImage, region: Option<(u16, u16, u16, u16)>, min_confidence: Option<f32>, tolerance: Option<u8>) -> Option<(u32, u32, u32, u32, f32)> {
+pub fn locate_image(
+    img: &DynamicImage,
+    region: Option<(u16, u16, u16, u16)>,
+    min_confidence: Option<f32>,
+    tolerance: Option<u8>,
+) -> Option<(u32, u32, u32, u32, f32)> {
     // Default values
     let (x, y, width, height) = region.unwrap_or((0, 0, size().0, size().1));
     let min_confidence = min_confidence.unwrap_or(0.75);
@@ -208,6 +292,6 @@ pub fn locate_image(img: &DynamicImage, region: Option<(u16, u16, u16, u16)>, mi
         img_width,
         img_height,
         min_confidence,
-        tolerance
+        tolerance,
     )
 }
