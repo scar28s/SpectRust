@@ -45,7 +45,7 @@ use xcap::Monitor;
 //    return (primary.width as u16, primary.height as u16);
 //}
 
-fn screenshot(x: u16, y: u16, width: u16, height: u16) -> DynamicImage {
+fn screenshot(x: u32, y: u32, width: u32, height: u32) -> DynamicImage {
     // Get primary monitor (or adapt to find correct one if multi-monitor)
     let monitors = Monitor::all().expect("Unable to get monitors");
     let monitor = monitors
@@ -54,10 +54,10 @@ fn screenshot(x: u16, y: u16, width: u16, height: u16) -> DynamicImage {
         .expect("No primary monitor");
 
     // xcap uses u32 for coords & size
-    let x = x as u32;
-    let y = y as u32;
-    let width = width as u32;
-    let height = height as u32;
+    let x = x;
+    let y = y;
+    let width = width;
+    let height = height;
 
     // Optional: basic bounds check (you can improve this)
     let mon_width = monitor.width().unwrap_or(0);
@@ -81,7 +81,7 @@ fn screenshot(x: u16, y: u16, width: u16, height: u16) -> DynamicImage {
     DynamicImage::ImageRgba8(rgba_image.clone())
 }
 
-fn size() -> (u16, u16) {
+fn size() -> (u32, u32) {
     let monitors = Monitor::all().expect("Unable to get monitors");
     let primary = monitors
         .into_iter()
@@ -89,8 +89,8 @@ fn size() -> (u16, u16) {
         .expect("Unable to find primary monitor");
 
     (
-        primary.width().expect("No width") as u16,
-        primary.height().expect("No height") as u16,
+        primary.width().expect("No width") as u32,
+        primary.height().expect("No height") as u32,
     )
 }
 
@@ -226,7 +226,7 @@ fn within_tolerance(value1: u8, value2: u8, tolerance: u8) -> bool {
 // Returns coordinates and confidence if image is found, otherwise None.
 pub fn locate_center_of_image(
     img: &DynamicImage,
-    region: Option<(u16, u16, u16, u16)>,
+    region: Option<(u32, u32, u32, u32)>,
     min_confidence: Option<f32>,
     tolerance: Option<u8>,
 ) -> Option<(u32, u32, f32)> {
@@ -266,7 +266,7 @@ pub fn locate_center_of_image(
 // Returns coordinates, width, height and confidence if image is found, otherwise None.
 pub fn locate_image(
     img: &DynamicImage,
-    region: Option<(u16, u16, u16, u16)>,
+    region: Option<(u32, u32, u32, u32)>,
     min_confidence: Option<f32>,
     tolerance: Option<u8>,
 ) -> Option<(u32, u32, u32, u32, f32)> {
